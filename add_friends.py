@@ -35,6 +35,8 @@ async def open_friend_list(page: Page):
     await page.wait_for_timeout(4000)
     print("friend url: ", FRIEND_URL)
     await page.goto(FRIEND_URL)         
+
+
 # confirm friend page logic
 async def confirm_friend(page: Page):
     print("confirm friend page opened! Send the default friend message.")
@@ -46,7 +48,7 @@ async def confirm_friend(page: Page):
     await page.wait_for_load_state("networkidle")
 
 # get all friend links
-async def get_all_friend_links(page: Page):
+async def click_all_friend_links(page: Page):
     # get all selectors for a page
     links = await page.query_selector_all(
         'xpath=//a[text()="Add as a Friend"]'
@@ -59,17 +61,38 @@ async def get_all_friend_links(page: Page):
         await page.wait_for_load_state("networkidle")
         print("current url is: ", page.url)
         
-        # check url for /confirm_friend/ page. If url contains /add_as_friend/user_id then run confirm_friend()
-        # if directed to confirm friend page, then run confirm_friend()
-        if "add_as_friend" in page.url:
-            print("URL contains add_as_friend")
-            await page.wait_for_load_state("networkidle")
-            await confirm_friend()
-        else :
-            print("URL does not contain add_as_friend")
+        # re-locate element to ensure it's still on the page
+        link = await page.get_by_text("Add as a Friend").count()
+        
+        if link > 0:
+            if "add_as_friend" in page.url:
+                print("URL contains add_as_friend")
+                await page.wait_for_load_state("networkidle")
+                await confirm_friend(page)
+            else:
+                print("URL does not contain add_as_friend")
+        else:
+            print("Element not found or detached")
         
         print("friend added!")
         await page.wait_for_timeout(500)  
+        
+# go to next page
+async def go_to_next_page(page: Page):
+    
+    while True:
+        try:
+            # Click next page button
+            await page.locator('a[class="next_page"]').nth(1).click()
+            await page.wait_for_timeout(1000)
+            
+            # Click all friend links on the current page
+            await click_all_friend_links(page)
+        except Exception as e:
+            print("Exception: ", e)
+            break
+    
+    # to-do: add check if next page button is disabled. If so, close browser.
 
 # close browser
 async def closing_browser(page: Page, browser: Browser):
@@ -84,11 +107,17 @@ async def main():
         context = await browser.new_context(no_viewport=True)
         page = await context.new_page()
 
-        await open_goodreads(page)
-        await perform_sign_in(page)
-        await open_friend_list(page)
-        await get_all_friend_links(page)                       
-        await closing_browser(page, browser)
+        try:
+            await open_goodreads(page)
+            await perform_sign_in(page)
+            await open_friend_list(page)
+            while True:
+                await click_all_friend_links(page)  
+                await go_to_next_page(page)
+        except Exception as e:
+            print(f"An error occurred: {str(e)}")
+        finally:
+            await closing_browser(page, browser)
 
 # Run the script
 asyncio.run(main())
